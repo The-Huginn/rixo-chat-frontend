@@ -1,0 +1,406 @@
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+html {
+    height: 100%;
+}
+
+body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    background: #f0f2f5;
+    padding: 20px;
+    min-height: 100vh;
+    font-size: 14px;
+    margin: 0;
+}
+
+#app {
+    max-width: 1200px;
+    margin: 0 auto;
+    background: white;
+    border-radius: 8px;
+    box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+    height: calc(100vh - 40px);
+    display: flex;
+    flex-direction: column;
+    position: relative;
+    overflow: hidden;
+}
+
+header {
+    background: #2c3e50;
+    color: white;
+    padding: 15px 20px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-shrink: 0;
+}
+
+header h1 {
+    font-size: 1.5rem;
+}
+
+#connection-status {
+    padding: 5px 15px;
+    border-radius: 20px;
+    font-size: 12px;
+}
+
+#connection-status.connected {
+    background: #27ae60;
+}
+
+#connection-status.disconnected {
+    background: #e74c3c;
+}
+
+#connection-status.error {
+    background: #e74c3c;
+}
+
+#session-controls {
+    padding: 15px;
+    background: #ecf0f1;
+    text-align: center;
+    flex-shrink: 0;
+}
+
+#create-session-btn {
+    padding: 8px 25px;
+    background: #3498db;
+    color: white;
+    border: none;
+    border-radius: 5px;
+    cursor: pointer;
+    font-size: 14px;
+}
+
+#create-session-btn:hover {
+    background: #2980b9;
+}
+
+#create-session-btn:disabled {
+    background: #95a5a6;
+    cursor: not-allowed;
+}
+
+#session-info {
+    margin-top: 10px;
+    font-size: 12px;
+    color: #7f8c8d;
+}
+
+#session-id {
+    font-family: monospace;
+    background: #fff;
+    padding: 2px 8px;
+    border-radius: 3px;
+    font-size: 11px;
+}
+
+/* Chat wrapper - takes all available space */
+#chat-wrapper {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+    overflow: hidden;
+}
+
+/* Messages container - grows to fill space */
+#messages-container {
+    flex: 1;
+    overflow-y: auto;
+    overflow-x: hidden;
+    padding: 15px;
+    background: #fff;
+    min-height: 0;
+    border-top: 1px solid #dee2e6;
+}
+
+/* Custom scrollbar */
+#messages-container::-webkit-scrollbar {
+    width: 8px;
+}
+
+#messages-container::-webkit-scrollbar-track {
+    background: #f1f1f1;
+    border-radius: 4px;
+}
+
+#messages-container::-webkit-scrollbar-thumb {
+    background: #bdc3c7;
+    border-radius: 4px;
+}
+
+#messages-container::-webkit-scrollbar-thumb:hover {
+    background: #95a5a6;
+}
+
+#messages {
+    display: flex;
+    flex-direction: column;
+    min-height: min-content;
+}
+
+.message {
+    margin-bottom: 12px;
+    padding: 8px 12px;
+    border-radius: 8px;
+    max-width: 70%;
+    word-wrap: break-word;
+    font-size: 13px;
+    line-height: 1.5;
+    animation: messageSlideIn 0.3s ease-out;
+}
+
+@keyframes messageSlideIn {
+    from {
+        opacity: 0;
+        transform: translateY(10px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.user-message {
+    background: #3498db;
+    color: white;
+    margin-left: auto;
+    text-align: right;
+}
+
+.ai-message {
+    background: #ecf0f1;
+    color: #2c3e50;
+}
+
+.ai-message.streaming {
+    border-left: 3px solid #3498db;
+}
+
+.ai-message.streaming .typing-indicator {
+    animation: blink 1s infinite;
+    color: #3498db;
+    font-weight: bold;
+    margin-left: 2px;
+}
+
+@keyframes blink {
+    0%, 50% { opacity: 1; }
+    51%, 100% { opacity: 0; }
+}
+
+/* Text streaming animation */
+.text-animation {
+    display: inline;
+    opacity: 0;
+    animation: none;
+}
+
+.text-animation.animated {
+    animation: fadeInText 0.3s ease-out forwards;
+}
+
+@keyframes fadeInText {
+    from {
+        opacity: 0;
+        filter: blur(2px);
+        transform: translateY(2px);
+    }
+    to {
+        opacity: 1;
+        filter: blur(0);
+        transform: translateY(0);
+    }
+}
+
+.system-message {
+    background: #f39c12;
+    color: white;
+    text-align: center;
+    max-width: 100%;
+}
+
+/* Input container - always at bottom of chat area */
+#input-container {
+    padding: 15px;
+    background: #f8f9fa;
+    border-top: 2px solid #dee2e6;
+    display: flex;
+    gap: 10px;
+    flex-shrink: 0;
+}
+
+#message-input {
+    flex: 1;
+    padding: 8px 12px;
+    border: 1px solid #ced4da;
+    border-radius: 5px;
+    font-size: 13px;
+}
+
+#message-input:focus {
+    outline: none;
+    border-color: #3498db;
+    box-shadow: 0 0 0 2px rgba(52, 152, 219, 0.2);
+}
+
+#send-btn {
+    padding: 8px 25px;
+    background: #27ae60;
+    color: white;
+    border: none;
+    border-radius: 5px;
+    cursor: pointer;
+    font-size: 13px;
+}
+
+#send-btn:hover {
+    background: #229954;
+}
+
+/* Debug panel - flexible height when expanded */
+#debug-panel {
+    background: #2c3e50;
+    color: #ecf0f1;
+    transition: all 0.3s ease;
+    display: flex;
+    flex-direction: column;
+    border-top: 2px solid #34495e;
+    flex-shrink: 0;
+}
+
+/* When collapsed, only show header */
+#debug-panel.collapsed {
+    height: auto;
+}
+
+/* When expanded, take up to 30% of space */
+#debug-panel:not(.collapsed) {
+    height: 30vh;
+    max-height: 300px;
+}
+
+#debug-panel.collapsed #debug-log {
+    display: none;
+}
+
+.debug-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 12px 20px;
+    cursor: pointer;
+    user-select: none;
+    background: #2c3e50;
+    flex-shrink: 0;
+}
+
+.debug-header h3 {
+    margin: 0;
+    color: #3498db;
+    font-size: 14px;
+}
+
+#toggle-debug {
+    background: none;
+    border: none;
+    color: #3498db;
+    font-size: 16px;
+    cursor: pointer;
+    transition: transform 0.3s ease;
+    padding: 5px;
+}
+
+#debug-panel.collapsed #toggle-debug {
+    transform: rotate(-90deg);
+}
+
+#debug-log {
+    background: #1a252f;
+    padding: 10px 15px;
+    flex: 1;
+    overflow-y: auto;
+    overflow-x: hidden;
+    font-family: monospace;
+    font-size: 11px;
+    min-height: 0;
+}
+
+/* Custom scrollbar for debug log */
+#debug-log::-webkit-scrollbar {
+    width: 6px;
+}
+
+#debug-log::-webkit-scrollbar-track {
+    background: #2c3e50;
+}
+
+#debug-log::-webkit-scrollbar-thumb {
+    background: #34495e;
+    border-radius: 3px;
+}
+
+#debug-log::-webkit-scrollbar-thumb:hover {
+    background: #4a5f7a;
+}
+
+.debug-entry {
+    margin-bottom: 5px;
+    padding: 5px;
+    border-left: 3px solid #3498db;
+    padding-left: 10px;
+    white-space: pre-wrap;
+    word-break: break-all;
+    line-height: 1.4;
+}
+
+#error-container {
+    position: fixed;
+    top: 20px;
+    right: 20px;
+    z-index: 1000;
+}
+
+.error {
+    background: #e74c3c;
+    color: white;
+    padding: 12px 18px;
+    border-radius: 5px;
+    margin-bottom: 10px;
+    animation: slideIn 0.3s ease;
+    font-size: 13px;
+}
+
+@keyframes slideIn {
+    from {
+        transform: translateX(100%);
+        opacity: 0;
+    }
+    to {
+        transform: translateX(0);
+        opacity: 1;
+    }
+}
+
+/* Message content styling */
+.message strong {
+    font-weight: 600;
+    display: inline-block;
+    margin-bottom: 2px;
+}
+
+/* Responsive adjustments */
+@media (max-height: 600px) {
+    #debug-panel:not(.collapsed) {
+        height: 25vh;
+        max-height: 200px;
+    }
+}
