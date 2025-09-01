@@ -69,4 +69,3 @@ If you encounter CORS errors:
   - REST: POST /api/v1/ai/chat/session
   - WebSocket: ws://localhost:8080/handler
   - STOMP Subscribe: /topic/ai/chat/{sessionId}
-  - STOMP Send: /app/ai/chat/send

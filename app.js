@@ -3,12 +3,10 @@ const appState = {
     stompClient: null,
     connected: false,
     subscription: null,
-    messageBuffer: {
-        content: '',
-        messageElement: null,
-        timeout: null,
-        isStreaming: false
-    },
+    messageBuffer: new Map(),
+    currentMessageElement: null,
+    currentTypingState: null, // Track current typing animation
+    nextExpectedIndex: 0, // Track what index we're waiting for
     backendUrl: window.BACKEND_URL || 'http://localhost:8080'
 };
 
@@ -83,24 +81,32 @@ function sendMessage(text) {
     }
     
     const message = {
-        sessionId: appState.sessionId,
-        message: text,
-        messageType: 'USER_MESSAGE'
+        message: text
     };
     
     try {
+        const destination = `/app/ai/chat/session/${appState.sessionId}`;
+        debugLog('Sending to destination', destination);
+        debugLog('Message payload', JSON.stringify(message));
+        
         appState.stompClient.publish({
-            destination: '/app/ai/chat/send',
+            destination: destination,
             body: JSON.stringify(message),
             headers: {
                 'content-type': 'application/json'
             }
         });
         
-        debugLog('Message sent', message);
+        debugLog('Message sent successfully', { destination, message });
         displayMessage('You', text, 'user');
     } catch (error) {
         console.error('Failed to send message:', error);
+        debugLog('Send error details', { 
+            error: error.message, 
+            stack: error.stack,
+            destination: `/app/session/${appState.sessionId}`,
+            sessionId: appState.sessionId
+        });
         displayError('Failed to send message: ' + error.message);
     }
 }
@@ -110,12 +116,24 @@ function handleIncomingMessage(message) {
         const data = JSON.parse(message.body);
         debugLog('Received message', data);
         
-        if (data.messageType === 'AI_RESPONSE') {
-            handleStreamingAIMessage(data.message);
-        } else if (data.messageType === 'ERROR') {
-            displayError('Chat error: ' + data.message);
-        } else if (data.messageType === 'SYSTEM_MESSAGE') {
-            displayMessage('System', data.message, 'system');
+        if (data.type === 'TEXT_CHUNK') {
+            // Store the chunk
+            if (data.text !== null && data.text !== undefined && data.index !== undefined) {
+                appState.messageBuffer.set(data.index, data.text);
+                debugLog('Stored chunk', { index: data.index, text: data.text });
+                
+                // Check if we should start displaying
+                checkAndDisplayChunks();
+            }
+        } else if (data.type === 'TEXT_END') {
+            // Display any remaining chunks and finalize
+            finalizeMessage();
+        } else if (data.type === 'ERROR') {
+            displayError('Chat error: ' + (data.text || data.message || 'Unknown error'));
+            // Clear everything on error
+            resetMessageState();
+        } else if (data.type === 'SYSTEM_MESSAGE') {
+            displayMessage('System', data.text || data.message, 'system');
         } else {
             debugLog('Unknown message type', data);
         }
@@ -125,81 +143,132 @@ function handleIncomingMessage(message) {
     }
 }
 
-function handleStreamingAIMessage(text) {
-    // Clear any existing timeout
-    if (appState.messageBuffer.timeout) {
-        clearTimeout(appState.messageBuffer.timeout);
+function checkAndDisplayChunks() {
+    // Count consecutive chunks we have starting from nextExpectedIndex
+    let consecutiveChunks = 0;
+    let tempIndex = appState.nextExpectedIndex;
+    
+    while (appState.messageBuffer.has(tempIndex)) {
+        consecutiveChunks++;
+        tempIndex++;
     }
     
-    // If not currently streaming, create a new message element
-    if (!appState.messageBuffer.isStreaming) {
-        appState.messageBuffer.isStreaming = true;
-        appState.messageBuffer.content = '';
-        
-        const messagesDiv = document.getElementById('messages');
-        const messagesContainer = document.getElementById('messages-container');
-        const messageEl = document.createElement('div');
-        messageEl.className = 'message ai-message streaming';
-        messageEl.innerHTML = `<strong>AI:</strong> <span class="message-content"></span><span class="typing-indicator">▌</span>`;
-        messagesDiv.appendChild(messageEl);
-        messagesContainer.scrollTop = messagesContainer.scrollHeight;
-        
-        appState.messageBuffer.messageElement = messageEl;
-    }
-    
-    // Append new text to buffer
-    appState.messageBuffer.content += text;
-    
-    // Update the message content with animation
-    const contentSpan = appState.messageBuffer.messageElement.querySelector('.message-content');
-    
-    // Create a temporary element for the new chunk
-    const chunkSpan = document.createElement('span');
-    chunkSpan.className = 'text-animation';
-    chunkSpan.textContent = text;
-    contentSpan.appendChild(chunkSpan);
-    
-    // Trigger animation
-    requestAnimationFrame(() => {
-        chunkSpan.classList.add('animated');
-        
-        // Clean up animation classes after animation completes
-        setTimeout(() => {
-            if (chunkSpan && chunkSpan.parentNode) {
-                // Replace the span with its text content to clean up DOM
-                const textNode = document.createTextNode(chunkSpan.textContent);
-                chunkSpan.parentNode.replaceChild(textNode, chunkSpan);
-            }
-        }, 300); // Match animation duration
+    debugLog('Consecutive chunks available', { 
+        from: appState.nextExpectedIndex, 
+        count: consecutiveChunks,
+        bufferedIndices: Array.from(appState.messageBuffer.keys()).sort((a, b) => a - b)
     });
     
-    // Scroll to bottom
-    const messagesContainer = document.getElementById('messages-container');
-    messagesContainer.scrollTop = messagesContainer.scrollHeight;
-    
-    // Set timeout to finalize message after 2.5 seconds of no new content
-    // This prevents splitting messages when there's a brief pause in streaming
-    appState.messageBuffer.timeout = setTimeout(() => {
-        finalizeStreamingMessage();
-    }, 2500);
+    // If we have 5+ consecutive chunks, start displaying them
+    if (consecutiveChunks >= 5) {
+        displayAvailableChunks();
+    }
 }
 
-function finalizeStreamingMessage() {
-    if (appState.messageBuffer.isStreaming && appState.messageBuffer.messageElement) {
-        // Remove streaming class and typing indicator
-        appState.messageBuffer.messageElement.classList.remove('streaming');
-        const typingIndicator = appState.messageBuffer.messageElement.querySelector('.typing-indicator');
-        if (typingIndicator) {
-            typingIndicator.remove();
-        }
-        
-        // Reset buffer state
-        appState.messageBuffer.isStreaming = false;
-        appState.messageBuffer.messageElement = null;
-        appState.messageBuffer.content = '';
-        
-        debugLog('AI message finalized', 'Stream complete');
+function displayAvailableChunks() {
+    // Initialize message element if needed
+    if (!appState.currentMessageElement) {
+        initializeMessageElement();
     }
+    
+    // Process all consecutive chunks from nextExpectedIndex
+    let chunksToDisplay = '';
+    while (appState.messageBuffer.has(appState.nextExpectedIndex)) {
+        chunksToDisplay += appState.messageBuffer.get(appState.nextExpectedIndex);
+        appState.messageBuffer.delete(appState.nextExpectedIndex);
+        appState.nextExpectedIndex++;
+    }
+    
+    if (chunksToDisplay) {
+        appendToTypingAnimation(chunksToDisplay);
+    }
+}
+
+function initializeMessageElement() {
+    const messagesDiv = document.getElementById('messages');
+    const messagesContainer = document.getElementById('messages-container');
+    const messageEl = document.createElement('div');
+    messageEl.className = 'message ai-message';
+    messageEl.innerHTML = `<strong>AI:</strong> <span class="typing-text"></span><span class="typing-cursor">▌</span>`;
+    messagesDiv.appendChild(messageEl);
+    
+    appState.currentMessageElement = messageEl;
+    appState.currentTypingState = {
+        textSpan: messageEl.querySelector('.typing-text'),
+        cursorSpan: messageEl.querySelector('.typing-cursor'),
+        queue: '',
+        isTyping: false
+    };
+    
+    messagesContainer.scrollTop = messagesContainer.scrollHeight;
+}
+
+function appendToTypingAnimation(text) {
+    if (!appState.currentTypingState) return;
+    
+    // Add text to queue
+    appState.currentTypingState.queue += text;
+    
+    // Start typing if not already typing
+    if (!appState.currentTypingState.isTyping) {
+        startTyping();
+    }
+}
+
+function startTyping() {
+    if (!appState.currentTypingState || appState.currentTypingState.isTyping) return;
+    
+    appState.currentTypingState.isTyping = true;
+    const state = appState.currentTypingState;
+    const messagesContainer = document.getElementById('messages-container');
+    const typingSpeed = 15; // Faster since we're streaming
+    
+    function typeNext() {
+        if (state.queue.length > 0) {
+            // Take next character from queue
+            const char = state.queue[0];
+            state.queue = state.queue.substring(1);
+            state.textSpan.textContent += char;
+            
+            // Scroll to bottom
+            messagesContainer.scrollTop = messagesContainer.scrollHeight;
+            
+            // Continue typing
+            setTimeout(typeNext, typingSpeed);
+        } else {
+            // No more in queue
+            state.isTyping = false;
+            
+            // Check if there's new text that arrived while we were typing
+            if (state.queue.length > 0) {
+                startTyping();
+            }
+        }
+    }
+    
+    typeNext();
+}
+
+function finalizeMessage() {
+    // Display any remaining chunks
+    displayAvailableChunks();
+    
+    // Remove cursor
+    if (appState.currentTypingState && appState.currentTypingState.cursorSpan) {
+        appState.currentTypingState.cursorSpan.remove();
+    }
+    
+    // Reset state for next message
+    resetMessageState();
+    
+    debugLog('Message finalized');
+}
+
+function resetMessageState() {
+    appState.messageBuffer.clear();
+    appState.currentMessageElement = null;
+    appState.currentTypingState = null;
+    appState.nextExpectedIndex = 0;
 }
 
 function displayMessage(sender, text, type) {
@@ -230,7 +299,18 @@ function debugLog(label, data) {
     const entry = document.createElement('div');
     entry.className = 'debug-entry';
     const timestamp = new Date().toLocaleTimeString();
-    const dataStr = typeof data === 'object' ? JSON.stringify(data, null, 2) : data;
+    let dataStr;
+    
+    if (typeof data === 'object' && data !== null) {
+        dataStr = JSON.stringify(data, null, 2);
+    } else if (data === undefined) {
+        dataStr = 'undefined';
+    } else if (data === null) {
+        dataStr = 'null';
+    } else {
+        dataStr = String(data);
+    }
+    
     entry.innerHTML = `<strong>${timestamp}</strong> ${label}: ${escapeHtml(dataStr)}`;
     debugLog.appendChild(entry);
     debugLog.scrollTop = debugLog.scrollHeight;

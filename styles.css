@@ -192,6 +192,14 @@ header h1 {
     margin-left: 2px;
 }
 
+/* Typing cursor for new animation */
+.typing-cursor {
+    animation: blink 1s infinite;
+    font-weight: bold;
+    color: #3498db;
+    margin-left: 2px;
+}
+
 @keyframes blink {
     0%, 50% { opacity: 1; }
     51%, 100% { opacity: 0; }
